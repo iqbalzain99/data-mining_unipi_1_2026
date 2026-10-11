@@ -1,0 +1,278 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+}
+
+\captionsetup{font=small,labelfont=bf}
+\setlist{nosep,leftmargin=1.4em}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numbersep=5pt,
+  showstringspaces=false,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Data Mining: Fundamental}
+\fancyhead[R]{\small Seller-Level Vehicle Listings}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%=====================================================================
+%  Project metadata -- EDIT THESE
+%=====================================================================
+\newcommand{\coursename}{DATA MINING: FUNDAMENTAL}
+\newcommand{\projecttitle}{Project report: Seller-Level Vehicle Listings Dataset}
+\newcommand{\academicyear}{Academic Year 2026/2027}
+\newcommand{\teacherA}{Dino Pedreschi}
+\newcommand{\teacherB}{Riccardo Guidotti}
+\newcommand{\teacherC}{Andrea Fedele}
+\newcommand{\memberA}{Student One}
+\newcommand{\memberB}{Student Two}
+\newcommand{\memberC}{Student Three}
+
+\begin{document}
+
+%---------------------------------------------------------------------
+%  Title page
+%---------------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{1cm}
+  \includegraphics[width=0.28\linewidth]{figures/unipi_logo.png}\\[1.2cm]
+  {\Large UNIVERSITY OF PISA}\\[0.3cm]
+  {\large DEPARTMENT OF COMPUTER SCIENCE}\\[0.8cm]
+  {\large Master programme in Data Science and Business Informatics}\\[2.5cm]
+  {\LARGE\bfseries \coursename}\\[0.6cm]
+  {\Large \projecttitle}\\[3.5cm]
+  \begin{minipage}[t]{0.45\linewidth}
+    \raggedright
+    Teachers:\\
+    \teacherA\\
+    \teacherB\\
+    \teacherC
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.45\linewidth}
+    \raggedleft
+    Group:\\
+    \memberA\\
+    \memberB\\
+    \memberC
+  \end{minipage}\\[3cm]
+  \rule{\linewidth}{0.4pt}\\[0.4cm]
+  {\large \academicyear}
+\end{titlepage}
+
+%---------------------------------------------------------------------
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+
+%=====================================================================
+\pagenumbering{arabic}
+\section{Data Understanding and Preparation}
+\label{sec:understanding}
+\emph{(TODO: introduce the dataset, its source and the overall goal.)}
+
+\subsection{Data semantics}
+\label{sec:semantics}
+The Seller-Level Vehicle Listings Dataset contains one record per seller
+(\texttt{sp\_id}), summarising the vehicle listings observed for that seller.
+Describe each variable: meaning, source datatype and measurement scale, as
+in Table~\ref{tab:semantics}. The prediction target is
+\texttt{seller\_rating\_class} (low / medium / high).
+
+\begin{table}[h]
+  \centering
+  \caption{Semantic description of the dataset variables. \emph{(Fill in.)}}
+  \label{tab:semantics}
+  \small
+  \begin{tabular}{llll}
+    \toprule
+    Variable Name & Description & Datatype & Measurement scale \\
+    \midrule
+    \texttt{sp\_id} & Unique seller/dealer identifier & float & Identifier \\
+    \texttt{n\_listings} & Total number of listings & int & Numeric \\
+    \texttt{price\_median} & Median advertised price & float & Numeric \\
+    \texttt{dominant\_body\_type} & Most frequent body type & str & Categorical \\
+    \texttt{franchise\_status} & Franchise / independent / mixed / unknown & str & Categorical \\
+    \texttt{seller\_rating\_class} & Target rating category & str & Categorical (target) \\
+    \dots & \dots & \dots & \dots \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Distribution of variables and statistics}
+\label{sec:distribution}
+\emph{(TODO: describe how features are distributed and report summary tables
+and plots.)}
+
+\subsubsection{Summary of statistics}
+Table~\ref{tab:stats} reports count, mean, standard deviation, quartiles and
+range for the numeric variables.
+
+\begin{table}[h]
+  \centering
+  \caption{Summary of statistics for numeric variables. \emph{(Fill in from \texttt{df.describe()}.)}}
+  \label{tab:stats}
+  \small
+  \begin{tabular}{lrrrrrrrr}
+    \toprule
+    Variable & Count & Mean & Std & Min & 25\% & 50\% & 75\% & Max \\
+    \midrule
+    \texttt{price\_median} & & & & & & & & \\
+    \texttt{mileage\_median} & & & & & & & & \\
+    \texttt{horsepower\_median} & & & & & & & & \\
+    \dots & & & & & & & & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Distribution via histograms}
+\emph{(TODO: insert histograms and discuss skewness and outliers.)}
+
+\subsubsection{Distribution via pie chart and bar chart}
+\emph{(TODO: insert categorical distributions and the class balance of
+\texttt{seller\_rating\_class}.)}
+
+\subsection{Assessment of data quality}
+\label{sec:quality}
+
+\subsubsection{Missing value handling}
+\emph{(TODO: report the missing-value heatmap and the imputation strategy per
+attribute.)}
+
+\subsubsection{Outlier and noise detection}
+\emph{(TODO: boxplots and the decision on which extreme points to drop or
+keep.)}
+
+\subsubsection{Variables transformation}
+\emph{(TODO: encoding of categorical variables and scaling of numeric ones.)}
+
+\subsubsection{Pairwise correlations and variable elimination}
+\emph{(TODO: correlation heatmap and the reasoning for dropping redundant
+features.)}
+
+%=====================================================================
+\section{Clustering}
+\label{sec:clustering}
+\emph{(TODO: describe the clustering setup, the features used, and how
+dimensionality reduction was applied.)}
+
+\subsection{Centroid-based}
+\emph{(TODO: K-Means; elbow and silhouette for choosing $K$.)}
+
+\subsection{Density-based}
+\emph{(TODO: DBSCAN; $k$-NN distance plot to choose $\varepsilon$ and MinPts.)}
+
+\subsection{Hierarchical}
+\emph{(TODO: agglomerative clustering; linkage comparison and dendrograms.)}
+
+\subsection{Final discussion}
+\emph{(TODO: compare the methods and state which worked best.)}
+
+%=====================================================================
+\section{Classification}
+\label{sec:classification}
+The target variable is \texttt{seller\_rating\_class}. Describe the
+preprocessing, the train/test split, and the evaluation metrics (accuracy,
+precision, recall, F1, ROC-AUC).
+
+\subsection{KNN}
+\emph{(TODO: hyperparameter search results and per-class metrics.)}
+
+\subsection{Na\"ive Bayes}
+\emph{(TODO: Gaussian and/or Categorical Naive Bayes results.)}
+
+\subsection{Decision Trees}
+\emph{(TODO: tuning, pruning, and the resulting tree.)}
+
+\subsection{Final conclusion}
+\emph{(TODO: compare all classifiers and recommend one.)}
+
+\begin{table}[h]
+  \centering
+  \caption{Model comparison. \emph{(Fill in.)}}
+  \label{tab:clf-results}
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & Accuracy & Macro-F1 & Macro-AUC \\
+    \midrule
+    k-NN & & & \\
+    Na\"ive Bayes & & & \\
+    Decision Tree & & & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=====================================================================
+\section{Regression}
+\label{sec:regression}
+\emph{(TODO: describe the regression target and predictors.)}
+
+\subsection{Univariate regression}
+\emph{(TODO: simple regression per predictor.)}
+
+\subsection{Multivariate regression}
+\emph{(TODO: multiple and multi-target regression.)}
+
+%=====================================================================
+\section{Pattern Mining}
+\label{sec:patterns}
+\emph{(TODO: describe the discretization/binning of numeric attributes and the
+transactional representation.)}
+
+\subsection{Frequent patterns}
+\emph{(TODO: Apriori vs FP-Growth, support and itemset-size analysis.)}
+
+\subsection{Association rules}
+\emph{(TODO: top rules, support/confidence/lift, and interpretation.)}
+
+%=====================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+\emph{(TODO: summarise the findings and the main takeaways.)}
+
+\section*{Team Contributions}
+\label{sec:contributions}
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{p{0.3\linewidth}p{0.6\linewidth}}
+    \toprule
+    Member & Contribution \\
+    \midrule
+    \memberA & \\
+    \memberB & \\
+    \memberC & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\end{document}
