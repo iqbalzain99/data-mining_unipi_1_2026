@@ -52,9 +52,9 @@
 \newcommand{\teacherA}{Dino Pedreschi}
 \newcommand{\teacherB}{Riccardo Guidotti}
 \newcommand{\teacherC}{Andrea Fedele}
-\newcommand{\memberA}{Student One}
-\newcommand{\memberB}{Student Two}
-\newcommand{\memberC}{Student Three}
+\newcommand{\memberA}{Muhammad Iqbal Zain}
+\newcommand{\memberB}{Truong Giang Do}
+\newcommand{\memberC}{Vladislav Zhelezov}
 
 \begin{document}
 
@@ -84,7 +84,7 @@
     \memberB\\
     \memberC
   \end{minipage}\\[3cm]
-  \rule{\linewidth}{0.4pt}\\[0.4cm]
+  \rule{\linewidth}{0.4pt}\\[1cm]
   {\large \academicyear}
 \end{titlepage}
 
@@ -97,15 +97,13 @@
 \pagenumbering{arabic}
 \section{Data Understanding and Preparation}
 \label{sec:understanding}
-\emph{(TODO: introduce the dataset, its source and the overall goal.)}
+The dataset analyzed in this section comprises 13,843 records across 33 features. Each record represents an individual seller profile identified by \texttt{sp\_id}, aggregating inventory and listing-level attributes associated with that seller.
+
+In this section, we explore the data by examining feature semantics and distributions, identifying potential outliers, and outlining our strategy for handling missing values.
 
 \subsection{Data semantics}
 \label{sec:semantics}
-The Seller-Level Vehicle Listings Dataset contains one record per seller
-(\texttt{sp\_id}), summarising the vehicle listings observed for that seller.
-Describe each variable: meaning, source datatype and measurement scale, as
-in Table~\ref{tab:semantics}. The prediction target is
-\texttt{seller\_rating\_class} (low / medium / high).
+\emph{The Seller-Level Vehicle Listings Dataset} contains one record per seller (\texttt{sp\_id}), summarising the vehicle listings observed for that seller. Describe each variable: meaning, source datatype and measurement scale, as in Table~\ref{tab:semantics}. The prediction target is \texttt{seller\_rating\_class} (low / medium / high).
 
 \begin{table}[h]
   \centering
@@ -114,15 +112,41 @@ in Table~\ref{tab:semantics}. The prediction target is
   \small
   \begin{tabular}{llll}
     \toprule
-    Variable Name & Description & Datatype & Measurement scale \\
+    Variable Name & Description & Datatype & Msrmt scale \\
     \midrule
-    \texttt{sp\_id} & Unique seller/dealer identifier & float & Identifier \\
-    \texttt{n\_listings} & Total number of listings & int & Numeric \\
-    \texttt{price\_median} & Median advertised price & float & Numeric \\
-    \texttt{dominant\_body\_type} & Most frequent body type & str & Categorical \\
-    \texttt{franchise\_status} & Franchise / independent / mixed / unknown & str & Categorical \\
-    \texttt{seller\_rating\_class} & Target rating category & str & Categorical (target) \\
-    \dots & \dots & \dots & \dots \\
+    \emph{sp\_id} & Unique identifier of the seller/dealer & float64 & Identifier \\
+    \emph{n\_listings} & Total number of vehicle listings & int64 & Numerical \\
+    \emph{price\_median} & Median advertised price of vehicles & float64 & Numerical \\
+    \emph{savings\_amount\_median} & Median advertised savings amount & float64 & Numerical \\
+    \emph{daysonmarket\_median} & Median days vehicles remained on market & float64 & Numerical \\
+    \emph{mileage\_median} & Median vehicle mileage & float64 & Numerical \\
+    \emph{year\_median} & Median vehicle model year & float64 & Numerical \\
+    \emph{vehicle\_age\_median} & Median vehicle age at listing time & float64 & Numerical \\
+    \emph{owner\_count\_median} & Median number of previous vehicle owners & float64 & Numerical \\
+    \emph{horsepower\_median} & Median vehicle horsepower & float64 & Numerical \\
+    \emph{engine\_displacement\_median} & Median vehicle engine displacement & float64 & Numerical \\
+    \emph{city\_fuel\_economy\_median} & Median city fuel economy & float64 & Numerical \\
+    \emph{highway\_fuel\_economy\_median} & Median highway fuel economy & float64 & Numerical \\
+    \emph{back\_legroom\_median} & Median rear-seat legroom & float64 & Numerical \\
+    \emph{front\_legroom\_median} & Median front-seat legroom & float64 & Numerical \\
+    \emph{fuel\_tank\_volume\_median} & Median fuel tank capacity & float64 & Numerical \\
+    \emph{height\_median} & Median vehicle height & float64 & Numerical \\
+    \emph{length\_median} & Median vehicle length & float64 & Numerical \\
+    \emph{width\_median} & Median vehicle width & float64 & Numerical \\
+    \emph{pct\_isCab} & Proportion of vehicles previously used as cabs & float64 & Numerical \\
+    \emph{pct\_is\_new} & Proportion of vehicles classified as new & float64 & Numerical \\
+    \emph{pct\_salvage} & Proportion of vehicles with salvage status & float64 & Numerical \\
+    \emph{pct\_theft\_title} & Proportion of vehicles with theft titles & float64 & Numerical \\
+    \emph{n\_listing\_days} & Distinct calendar days with observed listings & int64 & Numerical \\
+    \emph{listing\_span\_days} & Span in days between earliest and latest listing & int64 & Numerical \\
+    \emph{dominant\_body\_type} & Most frequent vehicle body type & str & Categorical \\
+    \emph{dominant\_fuel\_type} & Most frequent fuel type & str & Categorical \\
+    \emph{dominant\_transmission} & Most frequent transmission type & str & Categorical \\
+    \emph{dominant\_wheel\_system} & Most frequent drivetrain configuration & str & Categorical \\
+    \emph{dominant\_listing\_color} & Most frequent exterior color & str & Categorical \\
+    \emph{franchise\_status} & Franchise status (franchise, independent, etc.) & str & Categorical \\
+    \emph{new\_used\_profile} & Inventory composition (new\_only, used\_only, etc.) & str & Categorical \\
+    \emph{seller\_rating\_class} & Discretized target rating (low, medium, high) & str & Ordinal \\
     \bottomrule
   \end{tabular}
 \end{table}
