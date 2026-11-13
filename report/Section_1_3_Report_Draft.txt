@@ -1,0 +1,510 @@
+================================================================================
+SECTION 1.3 REPORT DRAFT — ASSESSMENT OF DATA QUALITY (1.3.1 TO 1.3.4)
+Course: Data Mining: Fundamentals (A.Y. 2026/2027) — University of Pisa
+Dataset: Seller-Level Vehicle Listings Dataset (13,843 rows x 33 columns)
+Aligned with: Jaden branch + MIZ 2D (dominant_body_type, hp_bin) Imputation,
+              Log1p Tail Compression, Spearman Correlation & Redundant Feature
+              Elimination + Synthesis of Team Checks (MIZ & VZH) & Course Slides
+================================================================================
+
+
+################################################################################
+PART A: PLAIN-TEXT VERSION (FOR READING, GOOGLE DOCS, OR TEAM REVIEW)
+################################################################################
+
+1.3 Assessment of Data Quality
+------------------------------
+Prior to statistical imputation and feature transformation, we conducted a
+comprehensive syntactic and semantic audit across all 13,843 seller profiles
+and 33 attributes. No duplicate records, duplicate seller identifiers (sp_id),
+or negative numerical values were found. All proportion attributes (pct_isCab,
+pct_is_new, pct_salvage, pct_theft_title) strictly lie within the closed
+interval [0, 1], advertised discounts never exceed vehcle prices
+(savings_amount_median < price_median), and temporal consistency holds across
+all records (n_listing_days <= n_listings and n_listing_days <= listing_span_days + 1).
+Furthermore, fractional ".5" values observed in count and calendar-year medians
+(year_median, owner_count_median, daysonmarket_median) were verified to be
+mathematically valid medians resulting from sellers with an even number of
+vehicle listings. Finally, the unique seller identifier sp_id (originally
+stored as float64, e.g., 404771.0) was stripped of its decimal suffix via
+integer casting and stored as a nominal string (object) identifier
+(.astype(int).astype(str)) so it is automatically excluded from numerical
+summary statistics before being dropped in Section 1.3.4.
+
+
+1.3.1 Missing Value Handling
+----------------------------
+Out of the 33 initial attributes, 20 attributes contain missing information—17
+with explicit NaN values and 3 categorical attributes containing the string
+literal "unknown"—while the remaining 13 attributes are 100% complete (see
+Table 1.3 and Figure 1.3: Missing Value Heatmap).
+
+Visual inspection of the missingness matrix and row-level indices reveals that
+missing values are not purely random, but exhibit structured, domain-specific
+block co-missingness:
+  * Title-History Block (27 sellers, 0.20%): pct_isCab, pct_salvage, and
+    pct_theft_title are missing on the exact same 27 records, corresponding to
+    dealers whose listings lacked integrated vehicle-history reports (e.g.,
+    Carfax/AutoCheck).
+  * EPA Fuel-Economy Block (16 sellers, 0.12%): city_fuel_economy_median and
+    highway_fuel_economy_median are missing on the exact same 16 records,
+    reflecting dealers specializing in heavy-duty commercial trucks or
+    specialty vehicles exempt from standard EPA MPG ratings.
+  * Factory Specification-Sheet Block (6–7 sellers, 0.04–0.05%): Physical
+    chassis dimensions (height_median, length_median, width_median) and
+    horsepower_median are missing on the exact same 6 records (which also
+    overlap with the 7 records missing front_legroom_median and
+    fuel_tank_volume_median), indicating unrecorded specification sheets.
+
+[Table 1.3: Summary of Explicit (NaN) and Implicit ("unknown") Missing Values]
+------------------------------------------------------------------------------------
+Variable                                  Missing   Missing (%)  Type       Strategy
+------------------------------------------------------------------------------------
+dominant_wheel_system                      10,518       75.98%   NaN        Drop feature (>50% missing)
+engine_displacement_median                  3,393       24.51%   NaN        2D Group median (body type + hp_bin)
+dominant_listing_color                      1,510       10.91%   "unknown"  Retain as valid category
+owner_count_median                             39        0.28%   NaN        Group median (by body type)
+pct_isCab, pct_salvage, pct_theft_title   27 each        0.20%   NaN        Group median (by body type)
+back_legroom_median                       22 (19+3*)     0.16%   NaN        Group median (*3 zeros -> NaN)
+city_ & highway_fuel_economy_median       16 each        0.12%   NaN        Group median (by body type)
+front_legroom_, fuel_tank_volume_median    7 each        0.05%   NaN        Group median (by body type)
+height_, length_, width_, horsepower_      6 each        0.04%   NaN        Group median (by body type)
+dominant_transmission                           6        0.04%   "unknown"  Group mode (by body type)
+dominant_fuel_type                              1        0.01%   "unknown"  Group mode (by body type)
+vehicle_age_median                              1        0.01%   NaN        Mathematical (2020 - year)
+mileage_median                                  1        0.01%   NaN        Group median (by body type)
+------------------------------------------------------------------------------------
+
+Because complete-case (row-wise) deletion would discard over 76% of all
+sellers, we applied tailored column-level handling strategies:
+
+  * dominant_wheel_system (75.98% missing, 10,518 rows) -> Feature Elimination:
+    Since more than three-quarters of the dataset lacks drivetrain records, any
+    imputation method would fabricate the majority of the column and severely
+    bias downstream clustering and classification. We therefore dropped this
+    attribute.
+  * vehicle_age_median (1 missing row, 0.01%) -> Mathematical Imputation:
+    For seller sp_id = 293033 (where year_median = 2020.0), the missing value
+    was deterministically recovered using the exact domain relationship
+    vehicle_age_median = 2020.0 - year_median = 0.0 years.
+  * Remaining 14 Minor Missing Numerical Attributes (<0.30% missing, 1–39 rows)
+    -> 1D Group-Median Imputation by dominant_body_type:
+    Minor missing values in owner_count_median (39), title-history ratios (27),
+    back_legroom_median (22, including the 3 erroneous zeros recoded to NaN),
+    fuel economy (16), front legroom and fuel tank volume (7), dimensions and
+    horsepower_median (6), and mileage_median (1) were imputed using the median
+    within each dominant_body_type segment, ensuring robustness against
+    right-skewed distributions while retaining all 13,843 sellers.
+  * engine_displacement_median (24.51% missing, 3,393 rows) -> 2D Stratified
+    Group-Median Imputation by (dominant_body_type, hp_bin):
+    At 24.51% missingness, dropping the column would forfeit key powertrain
+    information. However, 1D group-median imputation by dominant_body_type
+    alone is insufficient because suv_crossover (65.2%) and sedan (20.8%)
+    comprise 86.0% of all sellers and share the exact same median (2,500.0 cc),
+    which would lump 2,936 out of 3,393 missing records (86.5%) into a single
+    artificial spike at 2,500.0 cc and shrink the IQR from 1,100 cc to 800 cc.
+    Because engine displacement is strongly coupled with horsepower
+    (Spearman r_s = +0.77) and horsepower_median is 99.96% complete, we
+    partitioned sellers into 5 horsepower quintiles (hp_bin: [78, 185],
+    (185, 216.5], (216.5, 255], (255, 287], and (287, 630] HP) and imputed
+    missing values using the median of each (dominant_body_type, hp_bin) cell
+    (with fallback to dominant_body_type median). On an 80/20 holdout
+    validation split of the 10,450 observed records, this 2D imputation reduces
+    Mean Absolute Error (MAE) from 622.6 cc (global median) and 521.3 cc (1D
+    body-type median) down to 349.3 cc (a 44.9% error reduction), distributing
+    imputed values across 22 realistic engine sizes (2,000–5,650 cc) and
+    preserving the original IQR of 1,100 cc (Q1 = 2,400 cc, Q3 = 3,500 cc).
+  * Implicit "unknown" in Categorical Attributes:
+    For dominant_fuel_type (1 row, 0.01%) and dominant_transmission (6 rows,
+    0.04%), "unknown" strings were recoded as NaN and imputed with the mode
+    grouped by dominant_body_type ("gasoline" and "a", respectively). Conversely,
+    for dominant_listing_color (1,510 rows, 10.91%), because the top two colors
+    ("white" at 37.3% and "black" at 32.3%) have comparable shares, mode
+    imputation would artificially inflate "white" by nearly 11%. Thus,
+    "unknown" is retained as a legitimate behavioral category representing
+    sellers that do not report exterior color.
+
+
+1.3.2 Outlier and Noise Detection
+---------------------------------
+We evaluated numerical distributions for anomalies and extreme values using
+horizontal boxplots with standard [Q1 - 1.5*IQR, Q3 + 1.5*IQR] whiskers
+(Figure 1.4) alongside percentile and physical-domain boundary checks
+(Table 1.4).
+
+[Table 1.4: IQR Outlier Counts and Percentile Bounds for Selected Numerical Variables]
+--------------------------------------------------------------------------------
+Variable                       Min        1%     Median        99%         Max  IQR Outliers (%)
+--------------------------------------------------------------------------------
+pct_theft_title               0.00      0.00       0.00       0.07        0.76    2,110 (15.24%)
+pct_salvage                   0.00      0.00       0.00       0.27        1.00    1,242  (8.97%)
+daysonmarket_median           0.00      8.00      36.00     280.00    1,987.00    1,110  (8.02%)
+length_median               151.00    175.97     189.80     231.83      282.30      921  (6.65%)
+fuel_tank_volume_median       7.15     13.60      18.25      28.00       52.00      806  (5.82%)
+pct_isCab                     0.00      0.00       0.12       0.78        1.00      678  (4.90%)
+n_listings                    5.00      5.00      70.00     572.48    4,959.00      641  (4.63%)
+listing_span_days             0.00     37.00     362.00   1,493.58    3,553.00      614  (4.44%)
+front_legroom_median         36.60     40.80      41.80      43.90       67.00      542  (3.92%)
+engine_displacement_median 1200.00   1800.00    2500.00    5700.00    6,800.00      321  (2.32%)
+back_legroom_median*         18.80     33.90      37.80      41.20       47.50      281  (2.03%)
+savings_amount_median         0.00      0.00     358.00   2,086.22    9,333.00      218  (1.57%)
+price_median               1699.00   4381.30   22385.00  59,920.57  236,438.00      171  (1.24%)
+city_fuel_economy_median     10.00     14.50      20.00      28.00      126.00      129  (0.93%)
+horsepower_median            78.00    148.00     243.00     385.00      630.00       62  (0.45%)
+vehicle_age_median            0.00      0.00       3.00      15.00       60.00       62  (0.45%)
+--------------------------------------------------------------------------------
+(*Note: back_legroom_median Min is 18.80 in after recoding 3 erroneous 0.0 in records to NaN.)
+
+As demonstrated in Table 1.4, indiscriminately removing all records flagged by
+the univariate 1.5*IQR rule across numerical attributes would eliminate 6,158
+out of 13,843 sellers (44.5% of the dataset). Closer inspection reveals two
+structural reasons why the naive IQR rule produces false-positive outlier flags:
+  1. Zero-Inflated Risk Proportions: In pct_theft_title (15.24% flagged) and
+     pct_salvage (8.97% flagged), over 84% of sellers have a value of 0.0,
+     resulting in Q1 = Q3 = 0 and IQR = 0. Consequently, any seller with a
+     non-zero share of salvage or theft-title vehicles (>0) falls above the
+     upper fence, even though these represent a genuine segment of secondary
+     and damaged-vehicle dealers.
+  2. Tightly Standardized Ergonomic & Dimension Specs: Mainstream passenger
+     sedans and SUVs cluster tightly around industry norms (e.g., 98% of
+     sellers have front_legroom_median within 40.8–43.9 in, IQR = 0.90 in).
+     Sellers specializing in heavy-duty commercial pickup trucks (fuel tank up
+     to 52.0 gal, length up to 282.3 in) or high-roof commercial cargo vans
+     (height_median up to 107.5 in) naturally fall outside the narrow fences.
+
+We therefore distinguished true measurement noise from valid domain outliers:
+  * True Semantic Noise Elimination (back_legroom_median == 0.0):
+    In Section 1.1.3, we identified 3 records (sp_id = 350763, 353464, 309061)
+    with back_legroom_median == 0.0 in despite having dominant_body_type
+    recorded as multi-seat suv_crossover or sedan. Because 0.0 in rear legroom
+    is physically impossible for multi-row passenger vehicles, these 3 values
+    were recoded as NaN and imputed with the body-type median in Section 1.3.1,
+    raising the minimum to a realistic 18.80 in.
+  * Retention of Valid Domain Outliers & Tail-Compression Strategy:
+    Extreme right-tail values in business volume (n_listings up to 4,959 for
+    mega-dealership groups), pricing (price_median up to $236,438 and
+    horsepower_median up to 630 HP for luxury/exotic dealers), vehicle age
+    (up to 60 years for classic car specialists), fuel economy (up to 126 MPG
+    representing EPA MPGe for electric/hybrid dealers), and turnover
+    (daysonmarket_median up to 1,987 days for slow-moving collector inventory)
+    reflect real market heterogeneity. Rather than deleting or arbitrarily
+    clipping these sellers—which would erase niche market segments—we retain
+    all 13,843 records in the cleaned dataset and apply logarithmic tail
+    compression (np.log1p) in Section 1.3.3. For algorithms highly sensitive to
+    extreme Euclidean distances (such as K-Means in Module 2), localized
+    percentile filtering or robust scaling can be applied in task-specific
+    pipelines without compromising the integrity of the master dataset.
+
+
+1.3.3 Variables Transformation
+------------------------------
+To address severe right-skewness and resolve magnitude disparities across the
+numerical attributes, we applied two sequential transformations: logarithmic
+tail compression (np.log1p) and feature scaling (Z-Score Standardization and
+Min-Max Normalization).
+
+1. Logarithmic Transformation (np.log1p) for Right-Skewed Features:
+   Fifteen non-negative numerical attributes exhibit pronounced positive
+   skewness (Skewness > 1.2) in the cleaned dataset. Because several attributes
+   (savings_amount_median, daysonmarket_median, mileage_median,
+   vehicle_age_median) contain valid zero observations where log(0) is
+   undefined, we applied log(1 + x) via np.log1p.
+
+[Table 1.5: Skewness Comparison Before and After np.log1p Transformation]
+--------------------------------------------------------------------------------
+Variable                     Original Skewness   Log1p Skewness   Effect
+--------------------------------------------------------------------------------
+daysonmarket_median                       8.75             0.47   Near-symmetric
+city_fuel_economy_median                  8.10             0.96   Near-symmetric
+n_listings                                5.25            -0.13   Near-symmetric
+highway_fuel_economy_median               3.87             0.48   Near-symmetric
+price_median                              3.45            -0.45   Near-symmetric
+savings_amount_median                     2.40            -0.40   Near-symmetric
+vehicle_age_median                        2.32             0.00   Symmetric
+fuel_tank_volume_median                   1.83             0.90   Near-symmetric
+engine_displacement_median                1.26             0.39   Near-symmetric
+listing_span_days                         2.15            -1.22   Moderately left-skewed
+length_median                             2.18             1.83   Narrow physical range
+front_legroom_median                      3.49             2.15   Narrow physical range
+pct_isCab                                 2.04             1.47   Bounded [0, 1] ratio
+pct_salvage                              10.35             9.33   Zero-inflated [0, 1]
+pct_theft_title                          14.12            10.64   Zero-inflated [0, 1]
+--------------------------------------------------------------------------------
+
+   As shown in Table 1.5, np.log1p dramatically compresses extreme right tails
+   and restores near-symmetry (|Skewness| < 1.0) across all 9 unbounded
+   business-scale, pricing, turnover, age, and powertrain variables—for
+   example, reducing skewness in n_listings from +5.25 to -0.13,
+   daysonmarket_median from +8.75 to +0.47, price_median from +3.45 to -0.45,
+   engine_displacement_median from +1.26 to +0.39, and vehicle_age_median from
+   +2.32 to 0.00. Conversely, for bounded proportions in [0, 1] with heavy
+   point masses at zero (pct_theft_title, pct_salvage, pct_isCab), log(1 + x)
+   behaves nearly linearly (ln(1+x) ~ x for small x) and cannot remove
+   structural zero-inflation; these proportions are best kept on their native
+   [0, 1] scale or discretized into categorical bins for Pattern Mining.
+
+2. Feature Scaling (StandardScaler vs. MinMaxScaler):
+   In the raw feature space, attributes span vastly different scales:
+   mileage_median ([0, 238,541]) and price_median ([1,699, 236,438]) are five
+   orders of magnitude larger than proportion variables ([0, 1]). Without
+   scaling, distance-based algorithms (K-Means, DBSCAN, Hierarchical
+   Clustering, and KNN) would be entirely dominated by mileage and price. We
+   therefore generated both Z-Score Standardized (StandardScaler, mean = 0,
+   std = 1) and Min-Max Normalized (MinMaxScaler, [0, 1]) representations.
+   Notably, standardizing untransformed skewed features still leaves extreme
+   maxima (e.g., +35.32 std for n_listings and +34.57 std for
+   daysonmarket_median), confirming that np.log1p compression must precede
+   Z-score standardization when preparing inputs for distance-based models.
+
+
+1.3.4 Pairwise Correlations and Variable Elimination
+----------------------------------------------------
+To investigate inter-feature dependencies, we first visualized a Pairwise
+Scatter Plot Matrix across key numerical attributes colored by
+seller_rating_class (Figure 1.5), and subsequently computed the full Spearman
+rank correlation matrix (r_s) across all 24 numerical variables (Figure 1.6 and
+Table 1.6).
+
+We selected Spearman's rank correlation (r_s) over Pearson's linear correlation
+(r_p) for two reasons verified by Figure 1.5:
+  1. Non-Linear Monotonic Relationships: Scatter plots of price_median against
+     mileage_median and vehicle_age_median follow an exponential L-shaped
+     depreciation curve—prices drop steeply over the first 3–5 years (or first
+     50,000 miles) and flatten asymptotically for older vehicles. Spearman
+     accurately captures this monotonic decay without assuming linearity.
+  2. Robustness to Extreme Tails: Spearman operates on ranks and is invariant
+     to extreme right-tail outliers and monotonic log transformations.
+
+[Table 1.6: Top Strongly Correlated Numerical Feature Pairs (|r_s| >= 0.80)]
+--------------------------------------------------------------------------------
+Feature 1                     Feature 2                     Spearman r_s  Decision
+--------------------------------------------------------------------------------
+year_median                   vehicle_age_median                 -0.9837  Drop year_median
+n_listings                    n_listing_days                     +0.9559  Retain (drop n_listing_days in clustering)
+city_fuel_economy_median      highway_fuel_economy_median        +0.9356  Drop highway_fuel_economy_median
+mileage_median                year_median                        -0.9316  Resolved by dropping year_median
+mileage_median                vehicle_age_median                 +0.9268  Retain both (usage vs. age)
+year_median                   pct_is_new                         +0.8727  Resolved by dropping year_median
+vehicle_age_median            pct_is_new                         -0.8671  Retain both (distinct semantics)
+mileage_median                pct_is_new                         -0.8614  Retain both (distinct semantics)
+price_median                  mileage_median                     -0.8226  Retain both (depreciation signal)
+price_median                  year_median                        +0.8195  Resolved by dropping year_median
+price_median                  vehicle_age_median                 -0.8154  Retain both (depreciation signal)
+horsepower_median             fuel_tank_volume_median            +0.8049  Retain both (powertrain vs. capacity)
+--------------------------------------------------------------------------------
+
+Key Insights from the Correlation Structure & Variable Elimination Decisions:
+
+  1. Elimination of Near-Duplicate Collinear Features (|r_s| > 0.93):
+     * year_median <-> vehicle_age_median (r_s = -0.9837): Because
+       vehicle_age_median is a direct linear shift of year_median
+       (2020.0 - year_median), keeping both introduces near-singular
+       multicollinearity in regression and double-weights vehicle age in
+       clustering. We dropped year_median and retained vehicle_age_median
+       (which is a true ratio-scale variable starting at 0.0 with 0.00 log1p
+       skewness).
+     * city_fuel_economy_median <-> highway_fuel_economy_median (r_s = +0.9356):
+       Both variables form a tight linear diagonal across conventional ICE and
+       EV/hybrid inventories, capturing the same powertrain efficiency
+       dimension. We dropped highway_fuel_economy_median and retained
+       city_fuel_economy_median.
+     * n_listings <-> n_listing_days (r_s = +0.9559): Total inventory size and
+       active posting days are strongly coupled. While n_listing_days is kept
+       in the general cleaned table for exploratory flexibility (e.g., deriving
+       posting intensity), it is excluded alongside redundant variables when
+       constructing non-collinear feature sets for clustering and regression.
+
+  2. Distinct Domain Correlation Blocks (0.71 <= |r_s| <= 0.93):
+     * Vehicle Condition & Lifecycle Block: vehicle_age_median, mileage_median
+       (r_s = +0.9268), pct_is_new (r_s = -0.8671), price_median
+       (r_s = -0.8154), and owner_count_median (r_s = +0.7926) form a cohesive
+       lifecycle cluster. Although mileage_median and vehicle_age_median are
+       strongly correlated, both are retained because their divergence captures
+       annual usage intensity (miles driven per year), which is highly
+       informative for price regression and rating classification.
+     * Physical Size & Powertrain Block: fuel_tank_volume_median correlates
+       positively with horsepower_median (+0.8049), engine_displacement_median
+       (+0.7949), and length_median (+0.7596), and negatively with
+       city_fuel_economy_median (-0.7977), while engine_displacement_median
+       also correlates strongly with horsepower_median (+0.7653) and
+       city_fuel_economy_median (-0.7626), cleanly separating heavy truck/SUV
+       dealers from compact sedan/hatchback specialists.
+
+  3. Final Prepared Dataset Summary (13,843 rows x 29 columns):
+     Removing dominant_wheel_system (75.98% missing in Section 1.3.1) together
+     with sp_id (non-predictive identifier), year_median, and
+     highway_fuel_economy_median yields a clean, zero-NaN master dataset of
+     13,843 sellers and 29 attributes. Furthermore, because the categorical
+     attribute new_used_profile is deterministically derived from pct_is_new
+     (verified with 100% agreement in Section 1.1.3), downstream models use
+     pct_is_new for numerical modeling and new_used_profile for categorical
+     Pattern Mining without including both simultaneously.
+
+
+
+################################################################################
+PART B: READY-TO-PASTE LATEX CODE FOR report/main.tex
+(Replaces lines 163–180 in report/main.tex; figures already extracted to
+ report/figures/missing_heatmap.png, boxplots_outliers.png,
+ pairplot_matrix.png, and spearman_correlation_heatmap.png)
+################################################################################
+
+\subsection{Assessment of data quality}
+\label{sec:quality}
+
+Prior to statistical imputation and feature transformation, we conducted a comprehensive syntactic and semantic audit across all $13,843$ seller profiles and $33$ attributes. No duplicate records, duplicate seller identifiers (\texttt{sp\_id}), or negative numerical values were found. All proportion attributes (\texttt{pct\_isCab}, \texttt{pct\_is\_new}, \texttt{pct\_salvage}, \texttt{pct\_theft\_title}) strictly lie within $[0, 1]$, advertised discounts never exceed vehicle prices ($\texttt{savings\_amount\_median} < \texttt{price\_median}$), and temporal consistency holds across all records ($\texttt{n\_listing\_days} \le \texttt{n\_listings}$ and $\texttt{n\_listing\_days} \le \texttt{listing\_span\_days} + 1$). Furthermore, fractional \texttt{.5} values observed in count and year medians (\texttt{year\_median}, \texttt{owner\_count\_median}, \texttt{daysonmarket\_median}) were verified to be mathematically valid medians of sellers with an even number of listings, and the unique seller identifier \texttt{sp\_id} (originally stored as \texttt{float64}) was converted to a nominal string (\texttt{str}) identifier so it is excluded from numerical computations.
+
+\subsubsection{Missing value handling}
+\label{sec:missing}
+
+Out of the $33$ initial attributes, $20$ attributes contain missing data ($17$ with explicit \texttt{NaN} values and $3$ categorical attributes containing the string literal \texttt{"unknown"}), while $13$ attributes are $100\%$ complete (Table~\ref{tab:missing} and Figure~\ref{fig:missing_heatmap}). Visual inspection of the missingness matrix and row-level indices reveals that missingness is not purely random, but occurs in domain-specific blocks:
+\begin{itemize}
+  \item \textbf{Title-history block ($27$ sellers, $0.20\%$):} \texttt{pct\_isCab}, \texttt{pct\_salvage}, and \texttt{pct\_theft\_title} are missing on the exact same $27$ rows, corresponding to sellers whose listings lacked integrated vehicle-history reports.
+  \item \textbf{EPA fuel-economy block ($16$ sellers, $0.12\%$):} \texttt{city\_fuel\_economy\_median} and \texttt{highway\_fuel\_economy\_median} are missing on the exact same $16$ rows, reflecting dealers specializing in heavy-duty trucks or specialty vehicles exempt from standard EPA MPG ratings.
+  \item \textbf{Specification-sheet block ($6\text{--}7$ sellers, $0.04\text{--}0.05\%$):} Physical dimensions (\texttt{height\_median}, \texttt{length\_median}, \texttt{width\_median}) and \texttt{horsepower\_median} are missing on the exact same $6$ rows (overlapping with the $7$ rows missing \texttt{front\_legroom\_median} and \texttt{fuel\_tank\_volume\_median}).
+\end{itemize}
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.95\linewidth]{figures/missing_heatmap.png}
+  \caption{Missing value (\texttt{NaN}) heatmap across the $33$ dataset attributes.}
+  \label{fig:missing_heatmap}
+\end{figure}
+
+\begin{table}[h!]
+  \centering
+  \caption{Summary of explicit (\texttt{NaN}) and implicit (\texttt{"unknown"}) missing values and handling strategies.}
+  \label{tab:missing}
+  \footnotesize
+  \begin{tabular}{lrrll}
+    \toprule
+    Variable & Missing & Missing (\%) & Type & Handling Strategy \\
+    \midrule
+    \texttt{dominant\_wheel\_system} & 10,518 & 75.98\% & \texttt{NaN} & Drop feature ($>50\%$ threshold) \\
+    \texttt{engine\_displacement\_median} & 3,393 & 24.51\% & \texttt{NaN} & 2D Group median (\texttt{dominant\_body\_type}, \texttt{hp\_bin}) \\
+    \texttt{dominant\_listing\_color} & 1,510 & 10.91\% & \texttt{"unknown"} & Retain as valid behavioral category \\
+    \texttt{owner\_count\_median} & 39 & 0.28\% & \texttt{NaN} & Group median by \texttt{dominant\_body\_type} \\
+    \texttt{pct\_isCab}, \texttt{pct\_salvage}, \texttt{pct\_theft\_title} & 27 (each) & 0.20\% & \texttt{NaN} & Group median by \texttt{dominant\_body\_type} \\
+    \texttt{back\_legroom\_median} & $22$ ($19+3^*$) & 0.16\% & \texttt{NaN} & Group median ($^*3$ zero-noise rows $\rightarrow$ \texttt{NaN}) \\
+    \texttt{city\_} \& \texttt{highway\_fuel\_economy\_median} & 16 (each) & 0.12\% & \texttt{NaN} & Group median by \texttt{dominant\_body\_type} \\
+    \texttt{front\_legroom\_}, \texttt{fuel\_tank\_volume\_median} & 7 (each) & 0.05\% & \texttt{NaN} & Group median by \texttt{dominant\_body\_type} \\
+    \texttt{height\_}, \texttt{length\_}, \texttt{width\_}, \texttt{horsepower\_median} & 6 (each) & 0.04\% & \texttt{NaN} & Group median by \texttt{dominant\_body\_type} \\
+    \texttt{dominant\_transmission} / \texttt{dominant\_fuel\_type} & 6 / 1 & $0.04\% / 0.01\%$ & \texttt{"unknown"} & Group mode by \texttt{dominant\_body\_type} \\
+    \texttt{vehicle\_age\_median} / \texttt{mileage\_median} & 1 / 1 & 0.01\% & \texttt{NaN} & Mathematical ($2020 - \text{year}$) / Group median \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Because complete-case deletion would discard over $76\%$ of all sellers, we applied tailored column-level strategies:
+\begin{itemize}
+  \item \textbf{\texttt{dominant\_wheel\_system} ($75.98\%$ missing):} Dropped from the dataset, as imputing three-quarters of the column would synthesize artificial drivetrain distributions.
+  \item \textbf{\texttt{vehicle\_age\_median} ($1$ missing):} For seller \texttt{sp\_id = 293033} ($\texttt{year\_median} = 2020.0$), the missing value was deterministically recovered as $\texttt{vehicle\_age\_median} = 2020.0 - \texttt{year\_median} = 0.0\text{ years}$.
+  \item \textbf{Minor missing numerical attributes ($14$ columns, $<0.30\%$ missing):} Imputed via the median segmented by \texttt{dominant\_body\_type}, ensuring robustness to right-skewness while preserving all $13,843$ records.
+  \item \textbf{\texttt{engine\_displacement\_median} ($24.51\%$ missing, $3,393$ rows):} Imputed using a \textbf{2D stratified group median by \texttt{(dominant\_body\_type, hp\_bin)}}, where \texttt{hp\_bin} partitions \texttt{horsepower\_median} into $5$ quintiles. Because \texttt{suv\_crossover} ($65.2\%$) and \texttt{sedan} ($20.8\%$) share the same overall median ($2,500\text{ cc}$), 1D imputation by \texttt{dominant\_body\_type} alone would lump $86.5\%$ of missing rows ($2,936/3,393$) into a single spike at $2,500\text{ cc}$ and shrink the IQR from $1,100\text{ cc}$ to $800\text{ cc}$. Conditioning on both body type and horsepower quintiles distributes the imputed values across $22$ realistic engine sizes ($2,000\text{--}5,650\text{ cc}$), preserves the original IQR of $1,100\text{ cc}$, and reduces $80/20$ holdout validation MAE from $622.6\text{ cc}$ (global median) and $521.3\text{ cc}$ (1D body-type median) down to $349.3\text{ cc}$ ($-44.9\%$ error).
+  \item \textbf{Implicit \texttt{"unknown"} values:} Negligible \texttt{"unknown"} counts in \texttt{dominant\_fuel\_type} ($1$ row) and \texttt{dominant\_transmission} ($6$ rows) were replaced with the segment mode (\texttt{"gasoline"} and \texttt{"a"}). In \texttt{dominant\_listing\_color} ($1,510$ rows, $10.91\%$), \texttt{"unknown"} is retained as a valid category because mode imputation would artificially inflate the top color (\texttt{"white"}, $37.3\%$) by nearly $11\%$.
+\end{itemize}
+
+\subsubsection{Outlier and noise detection}
+\label{sec:outliers}
+
+We examined numerical distributions using horizontal boxplots with standard $[Q_1 - 1.5\,\text{IQR},\, Q_3 + 1.5\,\text{IQR}]$ fences (Figure~\ref{fig:boxplots}) alongside percentile and domain-boundary checks (Table~\ref{tab:outliers}).
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.98\linewidth]{figures/boxplots_outliers.png}
+  \caption{Boxplots of numerical attributes illustrating right-skewness and points beyond $1.5 \times \text{IQR}$ whiskers.}
+  \label{fig:boxplots}
+\end{figure}
+
+\begin{table}[h!]
+  \centering
+  \caption{Percentile bounds and $1.5 \times \text{IQR}$ outlier counts for representative numerical attributes.}
+  \label{tab:outliers}
+  \footnotesize
+  \begin{tabular}{lrrrrrrr}
+    \toprule
+    Variable & Min & 1\% & Median & 99\% & Max & IQR Outliers & Outliers (\%) \\
+    \midrule
+    \texttt{pct\_theft\_title} & 0.00 & 0.00 & 0.00 & 0.07 & 0.76 & 2,110 & 15.24\% \\
+    \texttt{pct\_salvage} & 0.00 & 0.00 & 0.00 & 0.27 & 1.00 & 1,242 & 8.97\% \\
+    \texttt{daysonmarket\_median} & 0.00 & 8.00 & 36.00 & 280.00 & 1,987.00 & 1,110 & 8.02\% \\
+    \texttt{length\_median} & 151.00 & 175.97 & 189.80 & 231.83 & 282.30 & 921 & 6.65\% \\
+    \texttt{fuel\_tank\_volume\_median} & 7.15 & 13.60 & 18.25 & 28.00 & 52.00 & 806 & 5.82\% \\
+    \texttt{n\_listings} & 5.00 & 5.00 & 70.00 & 572.48 & 4,959.00 & 641 & 4.63\% \\
+    \texttt{front\_legroom\_median} & 36.60 & 40.80 & 41.80 & 43.90 & 67.00 & 542 & 3.92\% \\
+    \texttt{engine\_displacement\_median} & 1,200.00 & 1,800.00 & 2,500.00 & 5,700.00 & 6,800.00 & 321 & 2.32\% \\
+    \texttt{back\_legroom\_median}$^*$ & 18.80 & 33.90 & 37.80 & 41.20 & 47.50 & 281 & 2.03\% \\
+    \texttt{price\_median} & 1,699.00 & 4,381.30 & 22,385.00 & 59,920.57 & 236,438.00 & 171 & 1.24\% \\
+    \texttt{city\_fuel\_economy\_median} & 10.00 & 14.50 & 20.00 & 28.00 & 126.00 & 129 & 0.93\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Removing all records flagged by the univariate $1.5 \times \text{IQR}$ rule across numerical features would discard $6,158$ out of $13,843$ sellers ($44.5\%$). This high flag rate stems from two structural properties: (1) \textbf{zero-inflated risk proportions} (\texttt{pct\_theft\_title} and \texttt{pct\_salvage}), where over $84\%$ of sellers equal $0.0$ ($Q_1 = Q_3 = 0, \text{IQR} = 0$), causing every non-zero value to be flagged; and (2) \textbf{tightly standardized passenger-car dimensions} (e.g., $\text{IQR} = 0.90\text{ in}$ for \texttt{front\_legroom\_median}), which flag legitimate commercial truck and cargo-van dealers.
+
+Accordingly, we separated \textbf{true semantic noise} from \textbf{valid domain outliers}:
+\begin{itemize}
+  \item \textbf{True semantic noise (\texttt{back\_legroom\_median == 0.0}):} Three records exhibited $0.0\text{ in}$ rear legroom despite being multi-seat \texttt{suv\_crossover} or \texttt{sedan} profiles. Because $0.0\text{ in}$ rear legroom is physically impossible for multi-row passenger vehicles, these $3$ values were converted to \texttt{NaN} and imputed via group medians in Section~\ref{sec:missing} (raising \texttt{Min} to $18.80\text{ in}$).
+  \item \textbf{Valid extreme domain outliers:} Extreme right-tail values in \texttt{n\_listings} (up to $4,959$), \texttt{price\_median} (up to $\$236,438$), \texttt{horsepower\_median} (up to $630\text{ HP}$), \texttt{city\_fuel\_economy\_median} (up to $126\text{ MPGe}$ for EV/hybrid dealers), and \texttt{daysonmarket\_median} (up to $1,987\text{ days}$) represent genuine market segments (mega-franchises, exotic/luxury dealers, and collector inventories). All $13,843$ sellers are therefore retained, and heavy right tails are compressed via $\log(1+x)$ transformation in Section~\ref{sec:transformation}.
+\end{itemize}
+
+\subsubsection{Variables transformation}
+\label{sec:transformation}
+
+To mitigate severe right-skewness and resolve magnitude disparities across attributes, we applied logarithmic transformation (\texttt{np.log1p}) followed by feature scaling (\texttt{StandardScaler} and \texttt{MinMaxScaler}):
+\begin{itemize}
+  \item \textbf{Logarithmic tail compression (\texttt{np.log1p}):} Fifteen non-negative numerical features exhibited strong right-skewness ($\text{Skewness} > 1.2$). Because variables such as \texttt{savings\_amount\_median}, \texttt{daysonmarket\_median}, and \texttt{vehicle\_age\_median} include valid zero values where $\log(0)$ is undefined, we applied $\log(1 + x)$. As reported in Table~\ref{tab:skewness}, \texttt{np.log1p} restores near-symmetry ($|\text{Skewness}| < 1.0$) across all $9$ unbounded continuous scale, price, turnover, age, and powertrain variables. Conversely, for zero-inflated bounded proportions in $[0, 1]$ (\texttt{pct\_theft\_title}, \texttt{pct\_salvage}, \texttt{pct\_isCab}), $\ln(1+x) \approx x$ cannot eliminate the point mass at zero; these attributes are kept on their native $[0, 1]$ scale.
+  \item \textbf{Feature scaling (\texttt{StandardScaler} vs.\ \texttt{MinMaxScaler}):} Raw features differ by up to five orders of magnitude (\texttt{mileage\_median} $\in [0,\, 238,541]$ vs.\ \texttt{pct\_*} $\in [0, 1]$). To prevent large-scale features from dominating Euclidean distances in Clustering and KNN, we constructed both Z-score standardized ($\mu = 0, \sigma = 1$) and Min-Max normalized ($[0, 1]$) matrices. Because Z-score standardization on untransformed skewed variables still leaves extreme maxima (e.g., $+35.32\,\sigma$ for \texttt{n\_listings}), \texttt{np.log1p} compression is applied prior to scaling for distance-based models.
+\end{itemize}
+
+\begin{table}[h!]
+  \centering
+  \caption{Skewness reduction achieved by \texttt{np.log1p} on right-skewed numerical attributes ($\text{Skewness} > 1.2$).}
+  \label{tab:skewness}
+  \footnotesize
+  \begin{tabular}{lrrlrr}
+    \toprule
+    Variable & Raw Skew & \texttt{log1p} Skew & Variable & Raw Skew & \texttt{log1p} Skew \\
+    \midrule
+    \texttt{daysonmarket\_median} & 8.75 & 0.47 & \texttt{engine\_displacement\_median} & 1.26 & 0.39 \\
+    \texttt{city\_fuel\_economy\_median} & 8.10 & 0.96 & \texttt{listing\_span\_days} & 2.15 & $-1.22$ \\
+    \texttt{n\_listings} & 5.25 & $-0.13$ & \texttt{length\_median} & 2.18 & 1.83 \\
+    \texttt{highway\_fuel\_economy\_median} & 3.87 & 0.48 & \texttt{front\_legroom\_median} & 3.49 & 2.15 \\
+    \texttt{price\_median} & 3.45 & $-0.45$ & \texttt{pct\_isCab} & 2.04 & 1.47 \\
+    \texttt{savings\_amount\_median} & 2.40 & $-0.40$ & \texttt{pct\_salvage} & 10.35 & 9.33 \\
+    \texttt{vehicle\_age\_median} & 2.32 & 0.00 & \texttt{pct\_theft\_title} & 14.12 & 10.64 \\
+    \texttt{fuel\_tank\_volume\_median} & 1.83 & 0.90 & & & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Pairwise correlations and variable elimination}
+\label{sec:correlations}
+
+To investigate inter-feature dependencies, we visualized a pairwise scatter plot matrix of key numerical attributes colored by \texttt{seller\_rating\_class} (Figure~\ref{fig:pairplot}) and computed the full Spearman rank correlation matrix ($r_s$) across all $24$ numerical variables (Figure~\ref{fig:corr_heatmap}). Spearman correlation was chosen over Pearson correlation because Figure~\ref{fig:pairplot} reveals pronounced \textbf{non-linear monotonic relationships}—most notably the exponential L-shaped depreciation decay of \texttt{price\_median} with respect to \texttt{mileage\_median} and \texttt{vehicle\_age\_median}—as well as heavy-tailed distributions to which rank correlation is robust.
+
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}[b]{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/pairplot_matrix.png}
+    \caption{Pairwise scatter plot matrix ($n=1,500$).}
+    \label{fig:pairplot}
+  \end{minipage}\hfill
+  \begin{minipage}[b]{0.50\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/spearman_correlation_heatmap.png}
+    \caption{Spearman rank correlation matrix.}
+    \label{fig:corr_heatmap}
+  \end{minipage}
+\end{figure}
+
+Analysis of the correlation matrix identifies three near-collinear pairs ($|r_s| > 0.93$) and two broader domain blocks:
+\begin{itemize}
+  \item \textbf{\texttt{year\_median} $\leftrightarrow$ \texttt{vehicle\_age\_median} ($r_s = -0.9837$):} Because $\texttt{vehicle\_age\_median} = 2020.0 - \texttt{year\_median}$, retaining both introduces severe multicollinearity in regression and double-weights vehicle age in distance-based clustering. \textbf{Decision:} Drop \texttt{year\_median} and retain \texttt{vehicle\_age\_median} (a ratio-scale variable with $0.00$ \texttt{log1p} skewness).
+  \item \textbf{\texttt{city\_fuel\_economy\_median} $\leftrightarrow$ \texttt{highway\_fuel\_economy\_median} ($r_s = +0.9356$):} Both features capture the same underlying powertrain efficiency dimension across ICE and EV inventories. \textbf{Decision:} Drop \texttt{highway\_fuel\_economy\_median} and retain \texttt{city\_fuel\_economy\_median}.
+  \item \textbf{\texttt{n\_listings} $\leftrightarrow$ \texttt{n\_listing\_days} ($r_s = +0.9559$):} Total listing volume and active posting days are tightly coupled; while \texttt{n\_listing\_days} is retained in the general table for exploratory ratio creation, it is excluded alongside collinear variables during clustering feature selection.
+  \item \textbf{Lifecycle and Powertrain correlation blocks ($0.71 \le |r_s| \le 0.93$):} \texttt{vehicle\_age\_median}, \texttt{mileage\_median} ($+0.9268$), \texttt{pct\_is\_new} ($-0.8671$), and \texttt{price\_median} ($-0.8154$) form a cohesive vehicle-lifecycle cluster, while \texttt{fuel\_tank\_volume\_median}, \texttt{horsepower\_median} ($+0.8049$), \texttt{engine\_displacement\_median} ($+0.7949$), and \texttt{length\_median} ($+0.7596$) form a physical-size and powertrain block (with \texttt{engine\_displacement\_median} also correlating strongly with \texttt{horsepower\_median} at $+0.7653$ and negatively with \texttt{city\_fuel\_economy\_median} at $-0.7626$). Both \texttt{mileage\_median} and \texttt{vehicle\_age\_median} are retained because their divergence captures annual usage intensity (miles driven per year) for supervised modeling.
+\end{itemize}
+
+In summary, eliminating \texttt{dominant\_wheel\_system} ($75.98\%$ missing), \texttt{sp\_id} (unique identifier), \texttt{year\_median}, and \texttt{highway\_fuel\_economy\_median} yields a final prepared dataset (\texttt{df\_final}) of \textbf{$13,843\text{ rows} \times 29\text{ columns}$} with zero missing values.

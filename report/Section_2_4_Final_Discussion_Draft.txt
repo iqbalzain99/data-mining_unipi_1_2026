@@ -1,0 +1,47 @@
+2.4 Evaluations / Final discussion
+
+
+Table 2.1. Verified comparison in Scenario 3B. Silhouette and Davies–Bouldin for density methods exclude noise. Other rows cover every seller. Cluster sizes are listed in descending order; their order does not match cluster IDs across algorithms. Scores use all evaluated sellers, without random subsampling.
+
+Model | Groups | Silhouette | Davies–Bouldin | Noise (%) | Cluster sizes
+K-Means k=2 | 2 | 0.578 | 0.626 | 0.0 | 9559, 4284
+K-Means k=3 | 3 | 0.471 | 0.886 | 0.0 | 7787, 3919, 2137
+K-Means k=4 | 4 | 0.399 | 1.022 | 0.0 | 6478, 3914, 2054, 1397
+K-Means k=5 | 5 | 0.348 | 1.067 | 0.0 | 4308, 3914, 2527, 2013, 1081
+Ward euclidean k=2 | 2 | 0.579 | 0.607 | 0.0 | 9839, 4004
+Ward euclidean k=4 | 4 | 0.442 | 0.879 | 0.0 | 7115, 4004, 2234, 490
+Ward euclidean k=5 | 5 | 0.315 | 1.122 | 0.0 | 4471, 4004, 2644, 2234, 490
+Complete cityblock k=4 | 4 | 0.448 | 1.009 | 0.0 | 7591, 3576, 2575, 101
+Average euclidean k=4 | 4 | 0.498 | 0.684 | 0.0 | 9793, 4003, 38, 9
+Single euclidean k=4 | 4 | 0.275 | 0.514 | 0.0 | 13840, 1, 1, 1
+DBSCAN eps=0.09 ms=20 | 5 | 0.397 | 0.917 | 23.9 | 7013, 2302, 1064, 86, 68
+DBSCAN eps=0.10 ms=20 | 3 | 0.550 | 0.511 | 16.4 | 8568, 2926, 75
+HDBSCAN mcs=100 ms=20 | 3 | 0.521 | 0.690 | 28.6 | 6559, 2661, 670
+Bisecting k=4 | 4 | 0.367 | 1.065 | 0.0 | 6213, 4284, 1823, 1523
+GMM full k=4 | 4 | 0.394 | 1.719 | 0.0 | 6342, 4002, 2448, 1051
+
+For the selected four-group level, Ward is our preferred description: it improves separation over K-Means, assigns every seller and avoids the tiny residual groups found with Average and Single linkage. Complete–Manhattan has a slightly higher Silhouette, but its 101-seller group is less useful for the intended broad profiling than Ward's smallest group of 490 sellers. The preference is therefore based on separation, group sizes, coverage and interpretability together, not on winning every metric. K-Means remains a useful reference; the additional Bisecting and GMM results do not provide a stronger separation score than Ward at this resolution.
+
+Ward's four groups have the following observed profiles. Values are medians across sellers; these are descriptive labels, not established business categories.
+
+Table 2.2. Ward k=4 seller profiles (original units).
+Group | Sellers | Median listings | Median advertised price | Median mileage | Median vehicle age | Median new-vehicle share
+0 | 4,004 | 190 | 30,101.25 | 10.00 | 0 | 67.8%
+1 | 2,234 | 133.5 | 27,988.00 | 19,577.25 | 1 | 43.0%
+2 | 490 | 43 | 17,721.75 | 37,818.75 | 2 | 0.0%
+3 | 7,115 | 28 | 12,995.00 | 94,581.00 | 7 | 0.0%
+
+Group 0 combines larger inventories, higher prices and a high new-vehicle share; all its sellers are franchise sellers. Group 1 also consists almost entirely of franchise sellers (99.6%) but has a lower new-vehicle share and higher mileage. Group 2 is predominantly independent (92.7%) and used-only (97.8%); its median cab-history proportion is 52.6%, compared with 10.5% in Group 3. This supports a history-related distinction, but does not establish that these sellers operate rental or commercial fleets. Group 3 is the largest, predominantly independent (89.7%) and used-only (97.0%), with smaller inventories, lower prices and older, higher-mileage vehicles.
+
+Figure 2.4a compares separation, noise coverage and group sizes. In particular, DBSCAN's higher assigned-seller Silhouette cannot be interpreted as superiority over full-coverage Ward. The notebook additionally evaluates K-Means and Ward on exactly the same sellers retained by each density method; these are coverage-controlled descriptive comparisons, not test-set performance.
+
+Figure 2.4b shows every seller in an age-adjusted-mileage versus price view for K-Means, Ward and DBSCAN. The displayed axes use symmetric-log scaling to retain zero values and the full range. Groups can overlap in this projection because fitting uses seven features. Colours identify groups within each panel only; grey denotes DBSCAN noise.
+
+Overall, the data support a broad inventory-related separation and a more detailed four-group description. Neither the ratios nor the clustering justify labels such as CPO lease returns or premium business specialists. Franchise status and new/used composition help describe the groups, but share information with the inputs and are not independent ground truth. Finally, these clusters are not seller-rating classes: predicting the rating category remains a separate classification task.
+
+FIGURE FILES FOR LATEX
+Figure 2.3: figures/fig2_4_hierarchy.png
+Figure 2.4a: figures/fig2_4_evaluation.png
+Figure 2.4b: figures/fig2_4_seller_groups.png
+
+Course references: DM1 project guidelines, slide 8 (aggregate statistics, cluster distributions and algorithm suitability); clustering introduction, slide 34 (Silhouette); clustering lab notebook (full-data scoring and separate treatment of density noise).
