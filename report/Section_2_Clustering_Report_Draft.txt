@@ -1,81 +1,133 @@
 ================================================================================
-MODULE 2: CLUSTERING ANALYSIS (REPORT DRAFT - SECTIONS 2.1 TO 2.5)
+SECTION 2: CLUSTERING ANALYSIS (FINALIZED REPORT DRAFT — PLAIN TEXT)
 ================================================================================
 
-2.1. Feature Engineering, Feature Selection Scenarios, and Scaling Comparison
+2. CLUSTERING
+
+After some experimentation with feature engineering, we decided to add three new features, specified as follows:
+a) listings_per_day = n_listings / max(n_listing_days, 1)
+b) annual_mileage = mileage_median / (vehicle_age_median + 1)
+c) adverse_history_index = pct_isCab + pct_salvage + pct_theft_title
+
+Together with four original variables, we selected seven numerical features (price_median, pct_is_new, horsepower_median, city_fuel_economy_median, listings_per_day, annual_mileage, and adverse_history_index) from the 22 numerical columns. These features were chosen because they represent the core dimensions of the dealership business, whereas the remaining features were dropped due to strong redundancy with selected ones—such as highway_fuel_economy_median (with city_fuel_economy_median), engine_displacement_median (with horsepower_median), vehicle body dimensions, and raw variables already combined into the three engineered features.
+
+
 --------------------------------------------------------------------------------
-To establish a rigorous geometric space for distance-based clustering, we first bridged our correlation findings from Section 1.3.4 by constructing three domain-specific features before comparing four candidate feature subsets and two normalization schemes (Min-Max [0, 1] vs. Z-Score Standardization).
-
-First, regarding Feature Engineering, in Section 1.3.4 we retained the strongly collinear pairs (n_listings, n_listing_days; rs = 0.96) and (mileage_median, vehicle_age_median; rs = 0.93) in the master table because their relative ratios capture operational velocity and annual vehicle wear. However, feeding both raw pairs directly into Euclidean distance calculations would double-count inventory scale and vehicle age, while keeping the three sparse history percentages (pct_isCab, pct_salvage, pct_theft_title) as separate axes introduces zero-inflated noise. We therefore engineered three compact features:
-1. listings_per_day = n_listings / max(n_listing_days, 1): Measures active posting velocity (median = 1.79 listings/day; range = 1.00 to 53.38), distinguishing rapid-turnover dealerships from slow-moving lots while resolving the 0.96 collinearity with n_listing_days.
-2. annual_mileage = mileage_median / (vehicle_age_median + 1): Captures annual vehicle utilization (median = 8,878 miles/year), separating brand-new inventory (approx. 9 miles/year) and lightly driven Certified Pre-Owned (CPO) lease returns (approx. 6,660 miles/year) from heavily utilized commercial fleet vehicles (> 12,500 miles/year), resolving the 0.93 collinearity with vehicle_age_median.
-3. adverse_history_index = pct_isCab + pct_salvage + pct_theft_title: Aggregates commercial/taxi fleet history (non-zero in 87.1% of sellers) and severe title branding (salvage and theft recovery) into a single continuous index (median = 0.125; max = 1.396), compressing three separate columns into one axis.
-Consistent with Section 1.3.3, np.log1p was applied to skewed continuous attributes before scaling.
-
-Second, we benchmarked four Feature Space Scenarios across K-Means (k = 2 to 6) under both Min-Max and Z-Score scaling (Figure 2.1):
-- Scenario 1 (Baseline - All 22 Original Features): Suffers from the curse of dimensionality, collinear double-weighting, and uninformative physical dimensions (length, width, height, legroom), yielding low Silhouette scores (0.349 at k = 3; 0.247 at k = 4 under Min-Max).
-- Scenario 2 (8 Selected Core Original Features - n_listings, price_median, mileage_median, daysonmarket_median, pct_is_new, pct_isCab, horsepower_median, city_fuel_economy_median): Eliminating redundant and sparse columns raises the k = 4 Silhouette score from 0.247 to 0.371 (Davies-Bouldin drops from 1.57 to 1.14).
-- Scenario 3A (9 Features) & Scenario 3B (7 Orthogonal Engineered & Core Features - listings_per_day, price_median, annual_mileage, pct_is_new, adverse_history_index, horsepower_median, city_fuel_economy_median): Replacing collinear pairs and sparse history flags with the three engineered features achieves the strongest cluster separation across all k values: in Scenario 3B (Min-Max), Silhouette reaches 0.571 at k = 2 (DB = 0.63), 0.471 at k = 3 (DB = 0.89), 0.399 at k = 4 (DB = 1.02), and 0.348 at k = 5 (DB = 1.07).
-- Scenario 4 (PCA Dimensionality Reduction - 4 Principal Components explaining 85.3% of variance on the 22 features): Achieves Silhouette = 0.363 at k = 4 and 0.324 at k = 5. Notably, Scenario 3B outperforms PCA-4 while preserving 100% direct physical interpretability in original business units.
-
-Finally, comparing Min-Max [0, 1] against Z-Score Standardization reveals that Min-Max consistently outperforms Z-Score across every scenario (e.g., k = 4 Silhouette of 0.399 vs. 0.241 in Scenario 3B). Because Z-Score leaves unbounded extreme values (up to 6-10 standard deviations on tail ratios), Euclidean distances become dominated by small outlier pockets, whereas Min-Max bounds every feature strictly within [0, 1]. Consequently, Scenario 3B with log1p + Min-Max scaling is selected as the primary feature space for subsequent clustering analyses.
-
-
-2.2. Centroid-Based and Model-Based Clustering (K-Means, Bisecting K-Means, X-Means, GMM)
+2.1 Centroid-Based
 --------------------------------------------------------------------------------
-We applied K-Means (k-means++ initialization, 20 runs) across k = 2 to 9 on Scenario 3B (Figure 2.2). To verify that the discovered clusters reflect genuine market structure rather than random partitioning of a continuous space, we performed a Monte Carlo Uniform Random SSE Significance Test (15 uniform random realizations over [0, 1]^7). At k = 4, the empirical SSE is 755.2 compared to 5,842.3 +/- 18.4 for uniform random data (Z = -276.5, p < 0.0001, an 87.1% SSE reduction), confirming highly significant cluster structure.
+Corresponding figures:
+- fig2_1_kmeans_elbow_silhouette_compact.png (or split: fig2_1a_kmeans_sse_elbow.png, fig2_1b_kmeans_silhouette.png)
+- fig2_2a_kmeans_k4_parallel_coords.png & fig2_2b_kmeans_k4_real_unit_medians.png (or compact: fig2_2_kmeans_k4_profiles_compact.png)
 
-Evaluating the internal metrics across k (Figure 2.2a-c):
-- k = 2 (SSE = 1,244.6; Silhouette = 0.571; DB = 0.630) captures the macro division between Franchise New/Mixed Dealerships (42.8%) and Independent Used Dealerships (57.2%).
-- k = 3 (SSE = 880.7; Silhouette = 0.471; DB = 0.886) splits Franchise dealers into Pure New-Car Dealerships (28.3%) and Balanced New/CPO Dealerships (15.4%).
-- k = 4 (SSE = 755.2; Silhouette = 0.399; DB = 1.022; CH = 16,571.5) and k = 5 (SSE = 666.9; Silhouette = 0.348; DB = 1.067; CH = 14,531.7) mark the primary elbow inflection zone before Silhouette drops sharply to 0.262 at k = 6.
+Using the transformed, Min–Max scaled dataset from Section 1.3.3 (with the same transformation and scaling pipeline applied to the three engineered features), we applied K-Means (k-means++ initialization, 20 runs, random_state = 42) to all 13,843 sellers on both the 22-feature baseline and the 7-feature selected dataset. We evaluated k = 2–8 using Silhouette score and SSE on the full dataset without subsampling (Figure 2.1), with the main partitions (k = 2–5) summarized in Tables 2.1 and 2.2.
 
-Inspecting the inverse-transformed real-unit cluster medians and Parallel Coordinates (Figure 2.3) alongside external validation against unseen categorical attributes (Figure 2.4) reveals five distinct automotive dealer archetypes at k = 5 (with k = 4 merging C2 and C4 into a single Standard Used cluster):
-1. Cluster 0 - High-Volume Pure New-Car Franchise Dealerships (28.3%, n = 3,914): Highest inventory volume (191 listings) and posting velocity (2.59 listings/day), highest median price ($30,093), delivery-level annual mileage (8.75 miles/year), and 68% new cars. External validation confirms 100.0% are Franchise dealers, predominantly selling SUVs/Crossovers (79.0%) with high seller ratings.
-2. Cluster 3 - Balanced New & CPO Lease-Return Franchise Dealerships (14.5%, n = 2,013): Large inventory (142 listings; 2.20 listings/day) and high median price ($28,597), but moderate new-car share (45%) paired with low annual wear (6,656 miles/year), characteristic of Certified Pre-Owned lease-return programs. External validation shows 100.0% are Franchise dealers and 100.0% have a mixed new/used profile.
-3. Cluster 1 - Commercial Fleet, Rental & Adverse-Title Used Specialists (7.8%, n = 1,081 at k = 5; 10.1%, n = 1,397 at k = 4): Medium-sized used lots (46 listings; $18,039 median price; 0% new cars) distinguished by the highest annual utilization (12,531 miles/year), elevated fuel economy (21.5 MPG, 217 HP compact/midsize fleet sedans), and an adverse_history_index of 0.46 (nearly 4x higher than all other clusters).
-4. Cluster 2 - Economy / Budget Independent Used-Car Lots (31.1%, n = 4,308): Smallest scale (25 listings) and slowest velocity (1.35 listings/day), lowest median price ($9,773), high mileage wear (11,387 miles/year), and smaller engines (200.25 HP, 20.0 MPG). External validation confirms 94.0% are Independent dealers and 97.9% are used-only, with the highest share of sedans.
-5. Cluster 4 - High-Power Pickup Truck/SUV & Premium Used Specialists (18.3%, n = 2,527): Mid-sized used dealers (38 listings; $21,500 median price) with the cleanest title history (adverse_history_index = 0.08), highest median horsepower (285.0 HP), and lowest fuel economy (18.0 MPG), corresponding to dealers specializing in Pickup Trucks and large V6/V8 SUVs.
+Table 2.1: Full dataset (d = 22)
+| k | Cluster sizes | Sil. | SSE |
+| :---: | :--- | :---: | :---: |
+| 2 | [8523, 5320] | 0.482 | 3,178.8 |
+| 3 | [5066, 4964, 3813] | 0.348 | 2,554.1 |
+| 4 | [5060, 3801, 2608, 2374] | 0.246 | 2,360.3 |
+| 5 | [3829, 3259, 2592, 2366, 1797] | 0.213 | 2,174.0 |
 
-We further compared K-Means against Bisecting K-Means, Pelleg-Moore X-Means, and Gaussian Mixture Models (GMM / EM) (Figure 2.5):
-- Bisecting K-Means (biggest_inertia strategy) matches K-Means exactly at k = 2 (SSE = 1,244.6; Sil = 0.571) and closely tracks it at k = 4 (SSE = 826.2; Sil = 0.363; ARI = 0.812 with K-Means), though its greedy top-down splits cannot re-adjust boundaries globally, resulting in ~9% higher SSE at k = 4 and k = 5.
-- X-Means (BIC) and GMM (Full Covariance) show rapid BIC improvements from k = 2 (-263,502) through k = 4 (-281,626) and k = 5 (-284,684) before flattening. Full-covariance GMM achieves Silhouette = 0.388 at k = 4 (vs. 0.296 for Diagonal GMM), demonstrating that accommodating elliptical covariance between price, horsepower, and fuel economy improves mixture fit.
+Table 2.2: Feature-selected dataset (d = 7)
+| k | Cluster sizes | Sil. | SSE |
+| :---: | :--- | :---: | :---: |
+| 2 | [9559, 4284] | 0.578 | 1,244.6 |
+| 3 | [7787, 3919, 2137] | 0.471 | 880.7 |
+| 4 (selected) | [6478, 3914, 2054, 1397] | 0.399 | 755.2 |
+| 5 | [4308, 3914, 2527, 2013, 1081] | 0.348 | 666.9 |
+
+Comparing Tables 2.1 and 2.2 (and Figure 2.1b), using the 7-feature selected dataset clearly outperforms the 22-feature baseline across all k, raising the Silhouette score at k = 4 by +62.2% (0.246 to 0.399) and forming much tighter clusters once redundant features are removed. On the selected dataset (Figure 2.1a–b), k = 2 achieves the highest Silhouette (0.578), but it only divides sellers into two broad groups (new-car vs. used-car dealers) and leaves SSE high (1,244.6). Moving from k = 2 to k = 4 brings the steepest SSE reductions (down to 755.2), whereas beyond k = 4 the elbow curve begins to flatten and Silhouette drops below 0.35 (0.348 at k = 5). We therefore select k = 4 (Sil = 0.399, SSE = 755.2) as the elbow point that balances cluster compactness with a detailed segmentation of dealership inventories.
+
+As shown by the centroid parallel coordinates (Figure 2.2a) and real-unit cluster medians (Figure 2.2b), the four clusters at k = 4 separate clearly across the first five features while converging closely on horsepower_median and city_fuel_economy_median. Specifically, C1 (3,914 sellers, 28.3%) captures large new-car dealers with the highest listing activity (median 2.59 listings_per_day), high prices ($30,093), the highest new-vehicle share (68%), and near-zero annual_mileage (9 miles/year). C3 (2,054 sellers, 14.8%) represents mixed new and late-model dealers that maintain similarly high prices ($28,772) but have a lower new-vehicle share (45%) and higher annual_mileage (6,661 miles/year). C2, the largest group (6,478 sellers, 46.8%), corresponds to standard used-car lots with the lowest listing rate (1.40 listings_per_day), the lowest prices ($12,999), 0% new cars, and high annual_mileage (11,059 miles/year). Finally, C0 (1,397 sellers, 10.1%) isolates used-car sellers distinguished by a sharp peak in adverse_history_index (0.40, compared with 0.10–0.14 in the other groups), reflecting inventories with a high share of former cab, salvage, or theft-title vehicles.
+
+Figure captions (Section 2.1):
+- Figure 2.1: K-Means evaluation across k = 2–8: (a) SSE elbow curve on the selected dataset (d = 7) and (b) Silhouette score comparison between the selected (d = 7) and full (d = 22) datasets.
+- Figure 2.2a: K-Means (k = 4) centroid parallel coordinates profile across the 7 selected features.
+- Figure 2.2b: Real-unit cluster medians at k = 4 across the 7 selected features.
 
 
-2.3. Density-Based Clustering (DBSCAN, OPTICS, and HDBSCAN)
 --------------------------------------------------------------------------------
-To evaluate non-parametric clustering without spherical assumptions, we applied DBSCAN, OPTICS, and HDBSCAN to Scenario 3B (Figure 2.6).
-
-First, we plotted sorted k-nearest-neighbor distance curves for k in {5, 10, 15, 20, 30} (Figure 2.6a). Across k = 15 to 30, a clear knee inflection occurs within eps in [0.09, 0.11], where the curve transitions from the dense core distribution (80th-85th percentile) to the steep outlier tail. A systematic grid search over eps in [0.08, 0.12] and min_samples in {10, 15, 20, 30} (Figure 2.6b) identifies two key operational regimes:
-- At eps = 0.10, min_samples = 20, DBSCAN extracts 3 core clusters (sizes = [8,568 Used Core; 2,926 Pure New Franchise Core; 75 CPO Bridge]) while flagging 16.4% of sellers (n = 2,274) as noise, achieving a high non-noise Silhouette score of 0.547.
-- Reducing the radius to eps = 0.09, min_samples = 20 resolves 5 density clusters (sizes = [7,013, 2,302, 1,064, 86, 68]) with 23.9% noise and a clean Silhouette score of 0.401, successfully separating the Balanced CPO Franchise group (n = 1,064) from the Pure New Franchise core (n = 2,302).
-
-Second, to overcome DBSCAN's sensitivity to a single global eps threshold across variable-density regions, we computed the OPTICS Reachability Plot (min_samples = 25, xi = 0.04; Figure 2.6c) and applied HDBSCAN (min_cluster_size = 100, min_samples = 20; Figure 2.6d). The OPTICS reachability profile clearly reveals why fixed-eps DBSCAN struggles at eps = 0.10: the Pure New Franchise valley (reachability ~ 0.04-0.06) and Independent Used valley (reachability ~ 0.05-0.08) are substantially denser than the Balanced CPO Franchise valley (reachability ~ 0.08-0.11). HDBSCAN automatically adapts to these variable density levels, stably recovering all 3 major market regimes across min_cluster_size in [100, 200] (Cluster 2 Used Core: n = 6,560; Cluster 0 Pure New Franchise: n = 2,662; Cluster 1 Balanced CPO Franchise: n = 669) with 28.5% noise and a clean Silhouette score of 0.524.
-
-
-2.4. Hierarchical Clustering (Agglomerative)
+2.2 Density-Based Clustering
 --------------------------------------------------------------------------------
-We next performed Agglomerative Hierarchical Clustering on all 13,843 sellers across four linkage criteria (Ward, Complete, Average, Single) and two distance metrics (Euclidean L2 and Manhattan L1), evaluating both tree faithfulness via the Cophenetic Correlation Coefficient (c) and partition quality at k = 2 to 5 (Figure 2.7):
-1. Ward Linkage (Euclidean, c = 0.8741; Figure 2.7a): Minimizing within-cluster variance produces a well-balanced dendrogram with sharp vertical merge jumps. Remarkably, at k = 4, Ward linkage achieves a higher Silhouette score (0.445) and lower Davies-Bouldin index (0.88) than K-Means (0.399 and 1.02), partitioning the market into Independent Used (n = 7,115), Pure New Franchise (n = 4,004), Balanced CPO Franchise (n = 2,234), and Commercial/Adverse-Title Specialists (n = 490). Cutting further at k = 5 (Sil = 0.312) splits the 7,115 Used dealers into Budget Used (n = 4,471) and High-Power Truck/SUV Used (n = 2,644).
-2. Complete Linkage (Euclidean c = 0.8323 vs. Manhattan c = 0.8153; Figure 2.7b): Enforces compact cluster diameters. Notably, Manhattan (L1) Complete Linkage outperforms Euclidean (L2) Complete Linkage at k = 4 (Sil = 0.441 vs. 0.415; sizes = [7,591, 3,576, 2,575, 101]) and k = 5 (Sil = 0.401 vs. 0.368), because L1 distance is less distorted by single-feature extremes when computing maximum pairwise inter-cluster distances.
-3. Average Linkage / UPGMA (Euclidean c = 0.8998, Manhattan c = 0.8737; Figure 2.7c): Achieves the highest Cophenetic Correlation of all methods, indicating that average inter-group distances most faithfully preserve pairwise topological distances. At k = 2, it matches Ward linkage almost identically (Sil = 0.572, sizes = [9,840, 4,003]); however, at k = 3 to 5, it keeps the two macro clusters intact while isolating small extreme outlier groups (n = 38, 10, 9), acting as a structural compromise between Complete and Single linkage.
-4. Single Linkage (Euclidean c = 0.5372, Manhattan c = 0.5951; Figure 2.7d): Exhibits severe chaining effect, merging 13,842 sellers into one giant contiguous chain while peeling off single anomalous dealers one by one (sizes = [13,840, 1, 1, 1] at k = 4; Sil = 0.275), confirming its unsuitability for continuous multi-dimensional dealer segmentation.
+Unlike centroid-based methods that force every dealership into a spherical partition, density-based clustering identifies dense regions of arbitrary shape while isolating sparse transition points and outliers as noise. In high-dimensional spaces such as the full 22-feature dataset (d = 22), pairwise Euclidean distances become less discriminative due to feature redundancy and multiple zero-inflated indicators; preliminary checks on the 22-feature space confirm that DBSCAN collapses nearly all dealerships into a single macro-cluster plus peripheral noise. We therefore focus the density-based analysis directly on the selected seven-feature Min–Max space (d = 7), where local neighborhood densities remain meaningful and comparable across features.
+
+To determine the neighborhood parameters MinPts and epsilon (eps), we follow the standard dimensional heuristic MinPts >= d + 1 = 8, using 2d = 14 as a reference starting point and evaluating candidate values k = MinPts in {8, 14, 16, 20, 30}. For each candidate, we plot the sorted k-th nearest neighbor (k-NN) distances. Because automatic knee detection (KneeLocator, S = 1.0) captures the extreme upper-tail bend caused by sparse boundary outliers (eps = 0.176 to 0.266, where over 95% of sellers merge into a single cluster), we examine the lower onset of steep curvature at roughly half that distance (eps/2 ~ 0.088 to 0.133, Table 2.2a), which marks the actual density transition between dense seller cores and sparser transition regions.
+
+Table 2.2a: Reference k-NN distance knees (eps) and lower transition thresholds (eps/2) across candidate MinPts values (d = 7)
+| Parameter | MinPts = 8 | MinPts = 14 | MinPts = 16 | MinPts = 20 | MinPts = 30 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Upper-tail knee (eps) | 0.1757 | 0.1937 | 0.2177 | 0.2182 | 0.2661 |
+| Lower transition (eps/2) | 0.0878 | 0.0968 | 0.1088 | 0.1091 | 0.1330 |
+
+Testing the transition region around eps = 0.10 across MinPts values shows that smaller neighborhoods (MinPts in 8 to 16) fragment the inventory into 4 to 10 overly narrow micro-clusters, whereas MinPts between 18 and 22 stabilizes the partition into three coherent density cores. Fixing MinPts = 20 as the representative midpoint, we evaluate eps over [0.06, 0.20] under three practical selection criteria: at least two clusters, an unassigned noise share below 20%, and a minimum cluster size of at least 50 dealerships (Table 2.3).
+
+Table 2.3: DBSCAN sensitivity across candidate radius values (eps) at MinPts = 20, alongside HDBSCAN on the selected seven-feature dataset (d = 7)
+| Method & Parameters | Clusters | Cluster sizes | Noise (%) | Sil. (assigned) |
+| :--- | :---: | :--- | :---: | :---: |
+| DBSCAN (eps = 0.090, MinPts = 20) | 5 | [7013, 2302, 1064, 86, 68] | 23.9% | 0.397 |
+| DBSCAN (eps = 0.100, MinPts = 20) (selected) | 3 | [8568, 2926, 75] | 16.4% | 0.550 |
+| DBSCAN (eps = 0.115, MinPts = 20) | 2 | [9173, 3468] | 8.7% | 0.618 |
+| HDBSCAN (min_cluster_size = 100, min_samples = 20) | 3 | [6560, 2662, 669] | 28.6% | 0.521 |
+
+As summarized in Table 2.3, reducing the radius to eps = 0.090 pushes the unassigned noise rate to 23.9% (3,310 sellers) and splits the data into five uneven groups with a lower assigned-seller Silhouette of 0.397. Conversely, expanding the radius to eps = 0.115 increases the Silhouette score to 0.618 and reduces noise to 8.7%, but merges smaller specialized dealerships into two broad macro-clusters. We therefore select eps = 0.100 with MinPts = 20 as our primary density-based configuration, achieving a strong assigned-seller Silhouette of 0.550 while keeping noise at 16.4% (2,274 sellers) and preserving three interpretable seller segments.
+
+Examining the real-unit medians across the seven selected features reveals clear operational profiles for the three discovered clusters and the unassigned noise group:
+- Cluster 0 — Standard Used-Car Core (8,568 sellers, 61.9%): Represents the dominant dense core of traditional pre-owned dealerships (pct_is_new = 0.00), characterized by moderate inventory turnover (listings_per_day = 1.49), accessible pricing (price_median = $14,999), established vehicle usage (annual_mileage = 10,835 miles/year), low adverse history (adverse_history_index = 0.12), and mainstream engine specs (horsepower_median = 240 HP, city_fuel_economy_median = 20.0 MPG).
+- Cluster 1 — New-Car Oriented Inventory (2,926 sellers, 21.1%): Captures high-volume franchise dealerships (listings_per_day = 2.60) focused predominantly on brand-new vehicles (pct_is_new = 0.68, annual_mileage = 9 miles/year) at higher price points (price_median = $29,705), with clean histories (adverse_history_index = 0.11) and slightly higher power and fuel efficiency (horsepower_median = 245 HP, city_fuel_economy_median = 21.5 MPG).
+- Cluster 2 — High-Adverse / Commercial Fleet Used Niche (75 sellers, 0.5%): Isolates a tight, high-density pocket of fast-moving commercial and fleet resellers (listings_per_day = 4.08, pct_is_new = 0.00, price_median = $19,497, annual_mileage = 16,994 miles/year) whose inventories consist almost entirely of prior taxi/cab or adverse-history vehicles (adverse_history_index = 0.99, horsepower_median = 203 HP, city_fuel_economy_median = 24.0 MPG).
+- Unassigned / Noise Sellers (2,274 sellers, 16.4%): Rather than pure data errors, these unassigned dealerships (listings_per_day = 2.32, price_median = $29,365, annual_mileage = 870 miles/year, pct_is_new = 0.57, adverse_history_index = 0.20, horsepower_median = 252 HP, city_fuel_economy_median = 21.0 MPG) predominantly represent hybrid new/used or certified pre-owned (CPO) operations that lie in sparser transition zones between the pure used-car core (Cluster 0) and the franchise new-car core (Cluster 1), alongside extreme high-price luxury outliers.
+
+Finally, to evaluate whether hierarchical density thresholds can better accommodate varying local densities without a fixed global radius, we also tested HDBSCAN (min_cluster_size = 100, min_samples = 20) (Table 2.3). While HDBSCAN similarly recovers three core groups (sizes 6,560, 2,662, and 669; assigned Silhouette = 0.521), its stricter stability requirement leaves 28.6% of dealerships (3,952 sellers) unassigned, confirming that fixed-radius DBSCAN (eps = 0.100, MinPts = 20) provides a better balance between cluster separation and seller coverage on this dataset.
 
 
-2.5. Final Discussion and Cross-Algorithm Synthesis
 --------------------------------------------------------------------------------
-Table 2.1 and Figure 2.8 synthesize the quantitative performance, cluster size distributions, and pairwise partition consensus (Adjusted Rand Index ARI and Normalized Mutual Information NMI) across all clustering families tested on the Seller dataset:
+2.3 Hierarchical Clustering
+--------------------------------------------------------------------------------
+Corresponding figure:
+- fig2_7_dendrograms_4linkages_compact.png (full/split: fig2_6_dendrogram_full.png, fig2_7_dendrogram_selected.png)
 
-Summary Comparison of Clustering Algorithms (Scenario 3B, N = 13,843):
-- K-Means (k = 4 / k = 5): Sil = 0.399 / 0.348 | DB = 1.02 / 1.07 | Noise = 0.0% | Sizes (k=4) = [6478, 3914, 2054, 1397] | Strengths: Best global centroid separation, fast O(N*k*d), actionable 4- and 5-tier business profiles.
-- Bisecting K-Means (k = 4): Sil = 0.363 | DB = 1.12 | Noise = 0.0% | Sizes = [6112, 3914, 2055, 1762] | High agreement with K-Means (ARI = 0.81, NMI = 0.79); deterministic hierarchical splits.
-- GMM / EM (Full, k = 4): Sil = 0.388 | DB = 1.08 | Noise = 0.0% | Sizes = [6204, 3890, 2195, 1554] | Captures elliptical feature covariances and provides soft membership probabilities.
-- Agglomerative Ward (k = 4 / k = 5): Sil = 0.445 / 0.312 | DB = 0.88 / 1.12 | Noise = 0.0% | Sizes (k=4) = [7115, 4004, 2234, 490] | Highest full-dataset Silhouette at k = 4; strong consensus with K-Means (ARI = 0.79, NMI = 0.78).
-- Agglomerative Complete (Manhattan, k = 4): Sil = 0.441 | DB = 1.01 | Noise = 0.0% | Sizes = [7591, 3576, 2575, 101] | Robust to L2 tail distortion; strong agreement with Ward (ARI = 0.76).
-- DBSCAN (eps = 0.10, ms = 20): Sil (Clean) = 0.547 | Noise = 16.4% | Sizes = [8568, 2926, 75] | Isolates dense pure-used and pure-new cores while filtering transition dealers.
-- HDBSCAN (mcs = 100, ms = 20): Sil (Clean) = 0.524 | Noise = 28.5% | Sizes = [6560, 2662, 669] | Adapts to variable density, successfully recovering the lower-density CPO Franchise cluster (n = 669) missed by fixed-eps DBSCAN.
+Agglomerative clustering was evaluated across four linkage criteria—Ward, Group Average, Max (Complete), and Min (Single)—using Euclidean (L2) distance on the 22-feature baseline and the 7-feature selected dataset (Scenario 3B, Section 2.1). Each hierarchy was cut at k = 4 to align with the K-Means partition (Tables 2.4–2.5), and the four Euclidean linkages on the selected dataset were visualized via truncated dendrograms of the last p = 15 merged branches (Figure 2.7).
 
-Concluding Insights for the Seller Dataset:
-1. Algorithm Typology Suitability: Because automotive seller attributes (pricing, annual mileage, posting velocity, horsepower) form continuous, partially overlapping regimes rather than disconnected islands in R^7, variance-minimizing partitioning and hierarchical algorithms (K-Means and Ward Agglomerative Clustering at k = 4 and k = 5) provide the most practical and exhaustive segmentation for business profiling.
-2. Role of Density-Based Methods: DBSCAN and HDBSCAN complement K-Means and Ward by proving that the Seller dataset contains three high-density gravitational cores (Independent Used, Pure New Franchise, and Balanced CPO Franchise) surrounded by a ~16%-28% halo of specialized/hybrid dealers (such as Commercial Fleet/Adverse-Title specialists and exotic/high-power truck boutiques).
-3. Impact of Feature Engineering & Cross-Scenario Ablation (Figure 2.9): To verify that our attribute selection is not biased toward spherical K-Means, we further benchmarked Scenario 2A (7 Core Original Attributes: n_listings, price_median, mileage_median, pct_is_new, pct_isCab, horsepower_median, city_fuel_economy_median), Scenario 2B (8 Original Attributes, adding daysonmarket_median), and Scenario 3B (7 Engineered & Core Attributes) across all clustering families. First, adding daysonmarket_median (Scenario 2B) consistently degraded performance across all methods (e.g., HDBSCAN noise jumped from 34.6% to 52.5%). Second, Scenario 2A (7 Core Original) proved competitive in K-Means at k = 4 (Sil = 0.388 vs. 0.399 in 3B; franchise_status NMI = 0.523) and Euclidean Complete Linkage (Sil = 0.445 at k = 4), segmenting used-car lots primarily by cumulative mileage (40k vs. 115k miles). However, Scenario 3B outperformed Scenario 2A across the remaining paradigms: it boosted Ward k = 4 Silhouette by +56.2% (from 0.283 to 0.442), improved hierarchical Cophenetic Correlation from 0.7944 to 0.8741, prevented DBSCAN density-bridging at eps = 0.10 (All-Silhouette 0.359 vs. 0.107), enabled HDBSCAN to recover the third CPO Franchise core with lower noise (28.5% vs. 34.6%), and achieved the highest external agreement with new_used_profile (Ward k = 4 NMI = 0.681, ARI = 0.684).
+Table 2.4: Full dataset (d = 22, k = 4, Euclidean L2)
+| Linkage | Cluster sizes | Sil. | SSE |
+| :--- | :--- | :---: | :---: |
+| Ward | [4842, 4492, 2929, 1580] | 0.297 | 2,476.0 |
+| Average | [13839, 2, 1, 1] | 0.281 | 7,039.6 |
+| Max (Complete) | [5829, 5659, 1833, 522] | 0.274 | 2,818.9 |
+| Min (Single) | [13840, 1, 1, 1] | 0.233 | 7,041.6 |
+
+Table 2.5: Feature-selected dataset (d = 7, k = 4, Euclidean L2)
+| Linkage | Cluster sizes | Sil. | SSE |
+| :--- | :--- | :---: | :---: |
+| Ward (selected) | [7115, 4004, 2234, 490] | 0.442 | 794.4 |
+| Average | [9793, 4003, 38, 9] | 0.498 | 1,239.4 |
+| Max (Complete) | [8813, 3906, 1034, 90] | 0.422 | 1,011.4 |
+| Min (Single) | [13840, 1, 1, 1] | 0.275 | 3,465.5 |
+
+Using the 7-feature selected dataset clearly outperforms the 22-feature baseline, raising Ward Silhouette by +48.8% (0.297 to 0.442) and Max Silhouette from 0.274 to 0.422. Within this space, Ward linkage (Figure 2.7a) gives the best overall result, forming four well-balanced clusters with clear upper splits and the lowest error (SSE = 794.4)—close to K-Means (SSE = 755.2) while achieving a higher Silhouette score (0.442 vs. 0.399). Although Group Average (Figure 2.7c) records the highest Silhouette (0.498), it divides the data poorly and leaves SSE high (1,239.4) because it keeps almost all sellers in two large groups and separates only 47 outliers into two tiny clusters. For the remaining two methods, Max linkage (Figure 2.7b) produces a more usable partition (Sil = 0.422, SSE = 1,011.4), though it splits large groups unevenly—leaving one small 90-seller cluster—and still has higher error than Ward. Finally, Min linkage (Figure 2.7d) fails due to the chaining effect and outlier sensitivity, linking 13,840 sellers into one giant cluster while leaving only three isolated points (Sil = 0.275, SSE = 3,465.5).
+
+Figure caption (Section 2.3):
+- Figure 2.7: Truncated Euclidean dendrograms (last p = 15 merged branches) on the 7-feature selected dataset (d = 7, k = 4): (a) Ward, (b) Max (Complete), (c) Group Average, and (d) Min (Single) linkage.
+
+
+--------------------------------------------------------------------------------
+2.4 Final discussion
+--------------------------------------------------------------------------------
+Corresponding figure:
+- fig2_8_final_evaluation_compact.png (synced copy: fig2_8_final_algorithm_synthesis.png)
+
+[Option 1 — With Figure 2.8]
+Across all clustering families, reducing the feature space from all 22 numerical variables to the seven selected features (Scenario 3B, Section 2.1) consistently improved clustering quality—raising the k = 4 Silhouette score from 0.246 to 0.399 for K-Means and from 0.297 to 0.442 for Ward linkage. To choose the best overall algorithm in this seven-feature Min–Max space, we compared the main methods across Silhouette separation, SSE, cluster-size balance, and seller coverage (Figure 2.8). All Silhouette and SSE comparisons use Euclidean distance on the evaluated sellers; for density-based methods, Silhouette excludes unassigned noise points (labels != -1), so a higher score does not represent the full 13,843-seller population.
+
+At the selected four-group resolution (k = 4), Ward (Sil = 0.442, SSE = 794.4) and K-Means (Sil = 0.399, SSE = 755.2) provide the strongest overall descriptions, assigning 100% of sellers into four well-sized, interpretable dealership profiles ([7115, 4004, 2234, 490] in Ward and [6478, 3914, 2054, 1397] in K-Means). Ward achieves higher Silhouette separation while keeping its smallest group at a meaningful size (490 sellers, or 3.5%), whereas K-Means achieves the lowest overall error (SSE = 755.2) and the most balanced cluster sizes. By contrast, other Euclidean linkages illustrate why Silhouette alone cannot select a good partition: Max (Complete) scores Sil = 0.422 (SSE = 1,011.4) while leaving only 90 sellers in its smallest group, and Average reaches Sil = 0.498 (SSE = 1,239.4) only by splitting off 38 and 9 outliers into two tiny clusters.
+
+Density-based methods show a similar trade-off between local cohesion and coverage. DBSCAN (eps = 0.10, MinPts = 20) finds three clusters ([8568, 2926, 75]) with a high assigned-seller Silhouette of 0.550, but leaves 16.4% of sellers unassigned as noise; HDBSCAN (min_cluster_size = 100, min_samples = 20) detects three denser cores ([6560, 2662, 669], Sil = 0.521) while classifying 28.6% of sellers as noise. These methods are useful for identifying dense regions, but unassigned points cannot automatically be treated as a separate business category. Overall, Ward and K-Means at k = 4 provide the most balanced full-coverage segmentation, distinguishing dealers primarily by new-vehicle share, price, mileage, and adverse history; reducing to two clusters yields a simpler broad summary, whereas five clusters fragment the main segments (lowering Ward Silhouette to 0.315). Rather than claiming a single ground-truth partition, these clusters summarize inventory structure in the selected feature space and remain distinct from seller-rating prediction, which is addressed next via supervised classification.
+
+Figure caption (Section 2.4):
+- Figure 2.8: Separation (Silhouette), unassigned noise percentage, and cluster-size distribution on the seven-feature selected dataset (Scenario 3B). Colors in panel (c) denote size rank within each row rather than matched cluster identities across methods; grey indicates unassigned noise.
+
+---
+
+[Option 2 — Compact 1-Paragraph Summary Without Figure 2.8]
+Across all experiments, reducing the 22 numerical variables to the seven selected features (Scenario 3B, Section 2.1) substantially improved clustering quality across every algorithm family. Comparing all methods in this seven-feature Min–Max space shows that Ward linkage (k = 4, Sil = 0.442, SSE = 794.4) and K-Means (k = 4, Sil = 0.399, SSE = 755.2) deliver the best overall partitions, assigning 100% of the 13,843 sellers into four well-sized, interpretable groups (smallest cluster: 490 sellers, or 3.5%, in Ward and 1,397 sellers in K-Means). Ward provides cleaner Silhouette separation among balanced partitions, whereas K-Means minimizes overall SSE with more uniform cluster sizes. Conversely, Euclidean Max (Sil = 0.422, SSE = 1,011.4) and Average (Sil = 0.498, SSE = 1,239.4) achieve competitive or higher Silhouette scores only by isolating tiny outlier clusters (90 sellers for Max; 38 and 9 sellers for Average). Likewise, density-based methods—DBSCAN (eps = 0.10, MinPts = 20, assigned Sil = 0.550) and HDBSCAN (min_cluster_size = 100, min_samples = 20, assigned Sil = 0.521)—identify dense cores well, but leave 16.4% and 28.6% of sellers unassigned as noise. Therefore, K-Means and Ward at k = 4 provide the most complete descriptive segmentation of dealership inventories, while predicting seller_rating_class requires the supervised classification analysis in Section 3.
